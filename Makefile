@@ -1,4 +1,4 @@
-C_FOLDERS = guessingGame mastermind quadratic reflex sortingAlgorithms
+C_FOLDERS = bmpGenerator guessingGame mastermind quadratic reflex sortingAlgorithms
 C_OBJS = $(join $(addsuffix /,$(C_FOLDERS)),$(C_FOLDERS))
 
 JAVA_FOLDERS = Calculator PhysicsEngine SudokuSolver TriangleFractal
