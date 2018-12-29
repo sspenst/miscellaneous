@@ -1,3 +1,6 @@
+# bmpGenerator
+Generates a BMP image from scratch. Contains simple functionality for creating a custom image.
+
 # Calculator
 Created a fully functional calculator in Java which has a GUI interface and all the basic operations.
 
@@ -32,6 +35,5 @@ Efficient Sudoku solver with a Java Swing interface.
 # TriangleFractal
 Draws two kinds of triangular fractals.
 
-# twitchStats
-Retrieves real-time data from a specified Twitch stream and displays stats on how frequent certain emotes are typed into the chat.
-After letting this script run for about 15 minutes on a popular stream, it appears that Kappa, PogChamp, and EleGiggle are the most popular emotes respectively.
+# twitchChat
+Retrieves real-time data from a specified Twitch stream and outputs the chat logs.
