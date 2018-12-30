@@ -1,5 +1,5 @@
 /* * BMP GENERATOR *
- * The generated BMP image will have dimensions DRAW_WIDTH x DRAW_HEIGHT.
+ * The generated BMP image will have dimensions DRAW_WIDTH x DRAW_HEIGHT and the specified filename.
  * Use the pixelColor function to define the color at any given (x, y) coordinate.
  * To use your own colors in the BMP, update the color array and change COLORS to match the length of the array.
  */
@@ -23,7 +23,7 @@
 // 72 DPI × 39.3701 inches per meter yields 2834.6472
 #define RESOLUTION 2835
 
-const char *filename = "img.bmp";
+const char* filename = "img.bmp";
 
 const int color[COLORS] = {
 	0xFF0000, // RED : 0
@@ -164,9 +164,9 @@ char* createMetadata(int pixelDataSize) {
 	writeInt(header+30, 1);
 	// size of pixel data [bytes 34-37]
 	writeInt(header+34, pixelDataSize);
-    // horizontal resolution in pixels per meter [bytes 38-41]
+	// horizontal resolution in pixels per meter [bytes 38-41]
 	writeInt(header+38, RESOLUTION);
-    // vertical resolution in pixels per meter [bytes 42-45]
+	// vertical resolution in pixels per meter [bytes 42-45]
 	writeInt(header+42, RESOLUTION);
 	// color pallette information [bytes 46-49]
 	writeInt(header+46, COLORS);
