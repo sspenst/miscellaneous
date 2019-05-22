@@ -40,45 +40,19 @@ def get_difficulty_index(d):
         if d >= difficulties[i][1]:
             return i
 
-def get_data(credentials, stats_username):
-    """
-    Given a credentials object, returns all level rank data for 'stats_username'.
-    """
-    url_base = 'http://www.flashflashrevolution.com'
-    url_levelrank = url_base + '/levelrank.php?sub=' + stats_username
-
-    # initialize mechanize browser
-    br = mechanize.Browser()
-    br.set_handle_robots(False)
-    br.addheaders = [('User-agent', 'Mozilla/5.0')] 
-
-    print('[+] GET ' + url_base)
-    br.open(url_base)
-
-    print('[+] Logging in with credentials...')
-    br.form = br.forms()[0]
-    br.form['vb_login_username'] = credentials['username']
-    br.form['vb_login_password'] = credentials['password']
-    br.submit()
-
-    print('[+] GET ' + url_levelrank)
-    data = br.open(url_levelrank)
-    # print(data.read())
-
-    soup = BeautifulSoup(data, 'html.parser', from_encoding='iso-8859-1')
-
-    if soup.table == None:
-        print("[+] ERROR: Invalid login credentials")
-        exit()
-
-    return soup.table
-
 class Totals:
     """Class to keep track of scores"""
     def __init__(self):
         self.total = 0
         self.aaa = 0
         self.fc = 0
+
+class Tier:
+    """Class to keep track of per-tier_total data"""
+    def __init__(self):
+        self.count = 0
+        self.sum = 0
+        self.perfect = 0
 
 def format_data(raw_data):
     """
@@ -127,6 +101,7 @@ def format_data(raw_data):
             dd[index].aaa += 1
             ld[difficulty].aaa += 1
 
+        # this is so off lmao
         if row[cols['P']].string == row[cols['C']].string:
             dd[index].fc += 1
             ld[difficulty].fc += 1
@@ -150,8 +125,42 @@ elif len(sys.argv) != 1:
     print('\tpython3 stats.py <OPTIONAL:stats_username>')
     sys.exit()
 
-raw_data = get_data(credentials, stats_username)
-levels = format_data(raw_data)
+# URLs
+url_base = 'http://www.flashflashrevolution.com'
+url_levelrank = url_base + '/levelrank.php?sub=' + stats_username
+url_tiers = url_base + '/FFRStats/level_tiers.php'
+
+def get_browser():
+    """initialize mechanize browser"""
+    br = mechanize.Browser()
+    br.set_handle_robots(False)
+    br.addheaders = [('User-agent', 'Mozilla/5.0')]
+    return br
+
+def login(br):
+    print('[+] GET ' + url_base)
+    br.open(url_base)
+
+    print('[+] Logging in with credentials...')
+    br.form = br.forms()[0]
+    br.form['vb_login_username'] = credentials['username']
+    br.form['vb_login_password'] = credentials['password']
+    br.submit()
+
+    # TODO: check if credentials are correct here rather than throwing an error later on
+
+br = get_browser()
+login(br)
+
+print('[+] GET ' + url_levelrank)
+data = br.open(url_levelrank)
+soup = BeautifulSoup(data, 'html.parser', from_encoding='iso-8859-1')
+
+if soup.table == None:
+    print("[+] ERROR: Invalid login credentials")
+    exit()
+
+levels = format_data(soup.table)
 
 # sort the level data primarily by difficulty, and secondly by lowest rank
 sorted_levels = sorted(levels, key=lambda level:level['Rank'])
@@ -161,3 +170,29 @@ with open(output_file, 'w') as f:
     f.write(tabulate(sorted_levels, headers='keys', tablefmt='simple'))
 
 print('[+] Level ranks written to ' + output_file)
+
+
+##### TIERS #####
+
+print('[+] GET ' + url_tiers)
+data = br.open(url_tiers)
+soup = BeautifulSoup(data, 'html.parser', from_encoding='iso-8859-1')
+
+tier_mains = soup.find_all('div', class_="tier_main")
+tiers = {}
+
+for tier_main in tier_mains:
+    tier_earned = int(tier_main.find_all('span', class_="tier_earned")[0].string)
+    tier_total = int(tier_main.find_all('span', class_="tier_total")[0].string)
+
+    if tier_total not in tiers:
+        tiers[tier_total] = Tier()
+
+    tiers[tier_total].count += 1
+    tiers[tier_total].sum += tier_earned
+
+    if tier_earned == tier_total:
+        tiers[tier_total].perfect += 1
+
+print(tabulate(sorted([[t, tiers[t].perfect, tiers[t].count, tiers[t].sum, tiers[t].count * t] for t in tiers], key=lambda x:x[0]),
+    headers=['D', 'Perfect', 'Count', 'Earned', 'Total']))
