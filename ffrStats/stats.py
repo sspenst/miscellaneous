@@ -101,16 +101,35 @@ def format_data(raw_data):
             dd[index].aaa += 1
             ld[difficulty].aaa += 1
 
-        # this is so off lmao
-        if row[cols['P']].string == row[cols['C']].string:
+        if '*' in row[cols['Score']].string:
             dd[index].fc += 1
             ld[difficulty].fc += 1
 
     print(tabulate([[difficulties[i], dd[i].aaa, dd[i].fc, dd[i].total] for i in range(len(difficulties)-1, -1, -1)],
         headers=['Difficulty', 'AAAs', 'FCs', 'Total']))
 
-    print(tabulate(sorted([[d, ld[d].aaa, ld[d].fc, ld[d].total] for d in ld], key=lambda x:x[0]),
-        headers=['D', 'AAAs', 'FCs', 'Total']))
+    aaa_start = 0
+    aaa_total = 0
+
+    for d in OrderedDict(sorted(ld.items(), key=lambda x:x[0])):
+        if ld[d].aaa == ld[d].total:
+            if aaa_start == 0:
+                aaa_start = d
+            aaa_total += ld[d].aaa
+        else:
+            if aaa_start != 0:
+                print('Levels %d-%d: %d/%d AAAs' % (aaa_start, d-1, aaa_total, aaa_total))
+                aaa_start = 0
+                aaa_total = 0
+
+            print('Level %d: ' % d, end='')
+            if ld[d].aaa != 0:
+                print('%d/%d AAAs' % (ld[d].aaa, ld[d].total))
+            else:
+                print('%d/%d FCs' % (ld[d].fc, ld[d].total))
+
+    # print(tabulate(sorted([[d, ld[d].aaa, ld[d].fc, ld[d].total] for d in ld], key=lambda x:x[0]),
+    #     headers=['D', 'AAAs', 'FCs', 'Total']))
 
     return levels
 
