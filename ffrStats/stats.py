@@ -110,23 +110,28 @@ def format_data(raw_data):
 
     aaa_start = 0
     aaa_total = 0
-
-    for d in OrderedDict(sorted(ld.items(), key=lambda x:x[0])):
-        if ld[d].aaa == ld[d].total:
+    ld_ord = OrderedDict(sorted(ld.items(), key=lambda x:x[0]))
+    
+    for i, (d, t) in enumerate(ld_ord.items()):
+        if t.aaa == t.total:
             if aaa_start == 0:
                 aaa_start = d
-            aaa_total += ld[d].aaa
+            aaa_total += t.aaa
         else:
             if aaa_start != 0:
-                print('Levels %d-%d: %d/%d AAAs' % (aaa_start, d-1, aaa_total, aaa_total))
+                prev_d = list(ld_ord.keys())[i-1]
+                if aaa_start == prev_d:
+                    print('Level %d: %d/%d AAAs' % (aaa_start, aaa_total, aaa_total))
+                else:
+                    print('Levels %d-%d: %d/%d AAAs' % (aaa_start, prev_d, aaa_total, aaa_total))
                 aaa_start = 0
                 aaa_total = 0
 
             print('Level %d: ' % d, end='')
-            if ld[d].aaa != 0:
-                print('%d/%d AAAs' % (ld[d].aaa, ld[d].total))
+            if t.aaa != 0:
+                print('%d/%d AAAs' % (t.aaa, t.total))
             else:
-                print('%d/%d FCs' % (ld[d].fc, ld[d].total))
+                print('%d/%d FCs' % (t.fc, t.total))
 
     # print(tabulate(sorted([[d, ld[d].aaa, ld[d].fc, ld[d].total] for d in ld], key=lambda x:x[0]),
     #     headers=['D', 'AAAs', 'FCs', 'Total']))
