@@ -54,6 +54,13 @@ class Tier:
         self.sum = 0
         self.perfect = 0
 
+def printAAAsAndFCs(totals):
+    if totals.aaa != totals.total and totals.aaa != 0:
+        print(' %d/%d AAAs' % (totals.aaa, totals.total), end='')
+    if totals.fc != totals.total:
+        print(' %d/%d FCs' % (totals.fc, totals.total), end='')
+    print()
+
 def format_data(raw_data):
     """
     Given raw level rank data, returns a list of OrderedDict objects containing the
@@ -105,36 +112,20 @@ def format_data(raw_data):
             dd[index].fc += 1
             ld[difficulty].fc += 1
 
-    print(tabulate([[difficulties[i], dd[i].aaa, dd[i].fc, dd[i].total] for i in range(len(difficulties)-1, -1, -1)],
-        headers=['Difficulty', 'AAAs', 'FCs', 'Total']))
+    # print(tabulate([[difficulties[i], dd[i].aaa, dd[i].fc, dd[i].total] for i in range(len(difficulties)-1, -1, -1) if dd[i].aaa != dd[i].total],
+    #     headers=['Difficulty', 'AAAs', 'FCs', 'Total']))
 
-    aaa_start = 0
-    aaa_total = 0
-    ld_ord = OrderedDict(sorted(ld.items(), key=lambda x:x[0]))
-    
-    for i, (d, t) in enumerate(ld_ord.items()):
+    for i in range(len(difficulties)-1, -1, -1):
+        if dd[i].aaa == dd[i].total:
+            continue
+        print('%s:' % difficulties[i][0], end='')
+        printAAAsAndFCs(dd[i])
+
+    for d, t in sorted(ld.items(), key=lambda x:x[0]):
         if t.aaa == t.total:
-            if aaa_start == 0:
-                aaa_start = d
-            aaa_total += t.aaa
-        else:
-            if aaa_start != 0:
-                prev_d = list(ld_ord.keys())[i-1]
-                if aaa_start == prev_d:
-                    print('Level %d: %d/%d AAAs' % (aaa_start, aaa_total, aaa_total))
-                else:
-                    print('Levels %d-%d: %d/%d AAAs' % (aaa_start, prev_d, aaa_total, aaa_total))
-                aaa_start = 0
-                aaa_total = 0
-
-            print('Level %d: ' % d, end='')
-            if t.aaa != 0:
-                print('%d/%d AAAs' % (t.aaa, t.total))
-            else:
-                print('%d/%d FCs' % (t.fc, t.total))
-
-    # print(tabulate(sorted([[d, ld[d].aaa, ld[d].fc, ld[d].total] for d in ld], key=lambda x:x[0]),
-    #     headers=['D', 'AAAs', 'FCs', 'Total']))
+            continue
+        print('Level %d:' % d, end='')
+        printAAAsAndFCs(t)
 
     return levels
 
