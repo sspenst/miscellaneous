@@ -53,6 +53,22 @@ class Tier:
         self.sum = 0
         self.perfect = 0
 
+class Levelrank:
+    """A row of levelrank data"""
+    def __init__(self, row, cols):
+        self.rank = int(row[cols['rank']].string.replace(',', ''))
+        self.d = int(row[cols['d']].string)
+        self.level = row[cols['level']].string
+        self.score = int(row[cols['score']].string.replace(',', '').replace('*', ''))
+        self.fc = '*' in row[cols['score']].string
+        self.p = int(row[cols['p']].string.replace(',', ''))
+        self.g = int(row[cols['g']].string.replace(',', ''))
+        self.a = int(row[cols['a']].string.replace(',', ''))
+        self.m = int(row[cols['m']].string.replace(',', ''))
+        self.b = int(row[cols['b']].string.replace(',', ''))
+        self.c = int(row[cols['c']].string.replace(',', ''))
+        self.played = int(row[cols['played']].string.replace(',', ''))
+
 def printAAAsAndFCs(totals, f):
     if totals.aaa != totals.total and totals.aaa != 0:
         f.write(' %d/%d [color=#D95819]AAAs[/color]' % (totals.aaa, totals.total))
@@ -60,66 +76,46 @@ def printAAAsAndFCs(totals, f):
         f.write(' %d/%d [color=#009900]FCs[/color]' % (totals.fc, totals.total))
     f.write('\n')
 
-def format_data(raw_data, output_filename):
-    """
-    Given raw level rank data, returns a list of OrderedDict objects containing the
-    difficulty, rank, and name of all levels that have not been AAA'd.
-    """
-
-    print('[+] Formatting level ranks...')
-
+def extract_levelranks(raw_data):
     # get table columns
     cols = {}
     for i, th in enumerate(raw_data('tr')[0]('th')):
         if th.span:
             # remove arrow from table headers
             th.span.extract()
-        cols[th.string] = i
+        cols[th.string.lower()] = i
 
-    levels = []
+    return [Levelrank(tr('td'), cols) for tr in raw_data('tr')[1:]]
 
+def format_data(levelranks, output_filename):
     # per-difficulty distribution
     dd = [Totals() for _ in range(len(difficulties))]
     # per-level distribution
     ld = {}
 
-    for tr in raw_data('tr')[1:]:
-        row = tr('td')
-        rank = int(row[cols['Rank']].string.replace(',', ''))
-        difficulty = int(row[cols['D']].string)
+    for levelrank in levelranks:
+        dd_totals = dd[get_difficulty_index(levelrank.d)]
+        if levelrank.d not in ld:
+            ld[levelrank.d] = Totals()
+        ld_totals = ld[levelrank.d]
 
-        index = get_difficulty_index(difficulty)
-        dd[index].total += 1
+        dd_totals.total += 1
+        ld_totals.total += 1
 
-        if difficulty not in ld:
-            ld[difficulty] = Totals()
-
-        ld[difficulty].total += 1
-
-        # TODO: rank 1 != AAA !!!!! almost always but pls make it accurate
-        if rank != 1:
-            # keep track of levels that are already AAA'd
-            name = row[cols['Level']].string
-
-            levels.append(OrderedDict([('D', difficulty),
-                ('Rank', rank),
-                ('Name', name)]))
-        else:
-            dd[index].aaa += 1
-            ld[difficulty].aaa += 1
-
-        if '*' in row[cols['Score']].string:
-            dd[index].fc += 1
-            ld[difficulty].fc += 1
-
-    # print(tabulate([[difficulties[i], dd[i].aaa, dd[i].fc, dd[i].total] for i in range(len(difficulties)-1, -1, -1) if dd[i].aaa != dd[i].total],
-    #     headers=['Difficulty', 'AAAs', 'FCs', 'Total']))
+        if levelrank.fc:
+            dd_totals.fc += 1
+            ld_totals.fc += 1
+            if levelrank.p == levelrank.c and levelrank.b == 0:
+                dd_totals.aaa += 1
+                ld_totals.aaa += 1
 
     with open(output_filename, 'w') as f:
+        f.write('[b]Public Level Stats[/b]\n\n')
+
         for i in range(len(difficulties)-1, -1, -1):
             if dd[i].aaa == dd[i].total:
                 continue
-            f.write('%s:' % difficulties[i][0])
+            f.write('[color=#FF9900]%s[/color]:' % difficulties[i][0])
             printAAAsAndFCs(dd[i], f)
 
         f.write('\n')
@@ -129,8 +125,6 @@ def format_data(raw_data, output_filename):
                 continue
             f.write('[color=#FF9900]%d[/color]:' % d)
             printAAAsAndFCs(t, f)
-
-    # return levels
 
 credentials = json.loads(open('credentials', 'r').read())
 
@@ -143,11 +137,13 @@ elif len(sys.argv) != 1:
     print('\tpython3 stats.py <OPTIONAL:stats_username>')
     sys.exit()
 
+random_thought_id = '234639'
+
 # URLs
 url_base = 'http://www.flashflashrevolution.com'
 url_levelrank = url_base + '/levelrank.php?sub=' + stats_username
 url_tiers = url_base + '/FFRStats/level_tiers.php'
-url_post = url_base + '/profile/edit/thoughts/234639'
+url_post = url_base + '/profile/edit/thoughts/' + random_thought_id
 # TODO: provide an option for which random thought is used, and throw an error if the thought is invalid
 
 def get_browser():
@@ -189,9 +185,11 @@ if soup.table == None:
     print("[+] ERROR: Invalid login credentials")
     exit()
 
+levelranks = extract_levelranks(soup.table)
+
 output_filename = time.strftime("stats-%Y-%m-%d-%H-%M-%S.txt")
 
-format_data(soup.table, output_filename)
+format_data(levelranks, output_filename)
 
 # levels = format_data(soup.table, output_filename)
 
@@ -206,7 +204,7 @@ print('[+] Stats written to ' + output_filename)
 
 post(br, open(output_filename, 'r').read())
 
-print('[+] Stats posted to ' + output_filename)
+print('[+] Stats posted to ' + random_thought_id)
 
 ##### TIERS #####
 
