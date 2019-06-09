@@ -52,25 +52,34 @@ class Totals:
     def __init__(self):
         self.total = 0
         self.aaa = 0
+        self.sdg = 0
         self.fc = 0
         self.unplayed = 0
 
     def add_levelrank(self, levelrank):
         self.total += 1
-        if levelrank.fc:
-            self.fc += 1
         if levelrank.isAAA():
             self.aaa += 1
+        if levelrank.isSDG():
+            self.sdg += 1
+        if levelrank.fc:
+            self.fc += 1
         if levelrank.score == 0:
             self.unplayed += 1
 
     def to_string(self):
-        s = ''
         # TODO: options for colors
-        if self.aaa != 0 or self.fc == self.total:
+        s = ''
+        # print AAA count; only print 0 AAAs if all SDGs and FCs are complete
+        if self.aaa != 0 or (self.sdg == self.total and self.fc == self.total):
             s += ' %d/%d [color=#D95819]AAAs[/color]' % (self.aaa, self.total)
+        # print SDG count; only print 0 SDGs if all FCs are complete; only print 100% SDGs if not all FCs are complete
+        if (self.sdg != 0 or self.fc == self.total) and (self.sdg != self.total or self.fc != self.total):
+            s += ' %d/%d [color=#3774FF]SDGs[/color]' % (self.sdg, self.total)
+        # print FC count if there are no FCs remaining
         if self.fc != self.total:
             s += ' %d/%d [color=#009900]FCs[/color]' % (self.fc, self.total)
+        # print unplayed count if there are remaining unplayed levels
         if self.unplayed != 0:
             s += ' %d/%d [color=#999999]Unplayed[/color]' % (self.unplayed, self.total)
         return s + '\n'
@@ -80,7 +89,7 @@ class Levelrank:
     def __init__(self, row, cols):
         self.rank = int(row[cols['rank']].string.replace(',', ''))
         self.d = int(row[cols['d']].string)
-        self.level = row[cols['level']].string
+        self.level = row[cols['level']].string.replace('\\', '') # backslash replace is specifically for 'R/\IN'
         self.score = int(row[cols['score']].string.replace(',', '').replace('*', ''))
         self.fc = '*' in row[cols['score']].string
         self.p = int(row[cols['p']].string.replace(',', ''))
@@ -90,13 +99,16 @@ class Levelrank:
         self.b = int(row[cols['b']].string.replace(',', ''))
         self.c = int(row[cols['c']].string.replace(',', ''))
         self.played = int(row[cols['played']].string.replace(',', ''))
+        self.notes = levelstats[self.level]
 
     def isAAA(self):
         return self.fc and self.p == self.c and self.b == 0
 
     def isSDG(self):
-        # TODO: there is no way of knowing if this is an SDG without knowing the total number of notes in the song
-        return GOOD_SCORE * self.g + AVERAGE_SCORE * self.a + MISS_SCORE * self.m + BOO_SCORE * self.b < GOOD_SCORE * 10
+        return self.passed() and self.score > PERFECT_SCORE * (self.notes - 10) + GOOD_SCORE * 10
+
+    def passed(self):
+        return self.p + self.g + self.a + self.m == self.notes
 
 class Tier:
     """Class to keep track of per-tier_total data"""
@@ -204,6 +216,8 @@ class Browser:
 
 br = Browser()
 br.login()
+
+levelstats = json.loads(open('levelstats.json', 'r').read())
 
 output_filename = time.strftime('stats-%Y-%m-%d-%H-%M-%S.txt')
 print('[+] Writing stats to ' + output_filename)
