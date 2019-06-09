@@ -6,11 +6,11 @@ from bs4 import BeautifulSoup
 import json
 import mechanize
 
-output_filename = 'levelstats.json'
+OUTPUT_FILENAME = 'levelstats.json'
 
 # URLs
-url_base = 'http://www.flashflashrevolution.com'
-url_levelstats_base = url_base + '/levelstats.php?level='
+URL_BASE = 'http://www.flashflashrevolution.com'
+URL_LEVELSTATS_BASE = URL_BASE + '/levelstats.php?level='
 
 class Browser:
     def __init__(self):
@@ -25,14 +25,14 @@ class Browser:
         return BeautifulSoup(data, 'html.parser', from_encoding='iso-8859-1')
 
 br = Browser()
-songs = int(br.get(url_base).find(id='user_control_links').text.split()[0].replace(',', ''))
+songs = int(br.get(URL_BASE).find(id='user_control_links').text.split()[0].replace(',', ''))
 data = {}
 total = 0
 level = 0
 
 while total < 2:
     level += 1
-    levelstats = br.get(url_levelstats_base + str(level))
+    levelstats = br.get(URL_LEVELSTATS_BASE + str(level))
 
     # check h2 tags (there will be two if the level exists)
     h2 = levelstats('h2')
@@ -43,5 +43,5 @@ while total < 2:
         total += 1
         print('%d: %s - %d' % (total, name, notes))
 
-open(output_filename, 'w').write(json.dumps(data, indent=4, sort_keys=True))
-print('Stats written to ' + output_filename)
+open(OUTPUT_FILENAME, 'w').write(json.dumps(data, indent=4, sort_keys=True))
+print('Stats written to ' + OUTPUT_FILENAME)

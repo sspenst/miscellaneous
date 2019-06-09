@@ -4,8 +4,8 @@ user's credentials and stores the results in 'output_file'. The reuslts
 are ordered so that the easiest and lowest ranking levels that still
 need to be AAA'd appear first.
 
-Assumes there is an existing file in this directory named 'credentials'
-that contains a username and password in JSON format:
+Assumes there is an existing file in this directory named
+'credentials.json' that contains a username and password:
 {'username':'YOUR_USERNAME','password':'YOUR_PASSWORD'}
 """
 
@@ -18,7 +18,14 @@ import re
 import sys
 import time
 
-difficulties = [
+# raw scoring values
+PERFECT_SCORE = 50
+GOOD_SCORE = 25
+AVERAGE_SCORE = 5
+MISS_SCORE = -10
+BOO_SCORE = -5
+
+DIFFICULTIES = [
     ('Brutal', 100),
     ('Guru', 85),
     ('Master', 70),
@@ -36,16 +43,17 @@ difficulties = [
 ]
 
 def get_difficulty_index(d):
-    for i in range(len(difficulties)):
-        if d >= difficulties[i][1]:
+    for i in range(len(DIFFICULTIES)):
+        if d >= DIFFICULTIES[i][1]:
             return i
 
 class Totals:
-    """Class to keep track of scores"""
+    """Used for keeping track of totals"""
     def __init__(self):
         self.total = 0
         self.aaa = 0
         self.fc = 0
+        self.unplayed = 0
 
     def add_levelrank(self, levelrank):
         self.total += 1
@@ -53,13 +61,19 @@ class Totals:
             self.fc += 1
         if levelrank.isAAA():
             self.aaa += 1
+        if levelrank.score == 0:
+            self.unplayed += 1
 
-class Tier:
-    """Class to keep track of per-tier_total data"""
-    def __init__(self):
-        self.count = 0
-        self.sum = 0
-        self.perfect = 0
+    def to_string(self):
+        s = ''
+        # TODO: options for colors
+        if self.aaa != 0 or self.fc == self.total:
+            s += ' %d/%d [color=#D95819]AAAs[/color]' % (self.aaa, self.total)
+        if self.fc != self.total:
+            s += ' %d/%d [color=#009900]FCs[/color]' % (self.fc, self.total)
+        if self.unplayed != 0:
+            s += ' %d/%d [color=#999999]Unplayed[/color]' % (self.unplayed, self.total)
+        return s + '\n'
 
 class Levelrank:
     """A row of levelrank data"""
@@ -80,13 +94,16 @@ class Levelrank:
     def isAAA(self):
         return self.fc and self.p == self.c and self.b == 0
 
-def printAAAsAndFCs(totals, f):
-    # TODO: options for colors
-    if totals.aaa != totals.total and (totals.aaa != 0 or totals.fc == totals.total):
-        f.write(' %d/%d [color=#D95819]AAAs[/color]' % (totals.aaa, totals.total))
-    if totals.fc != totals.total:
-        f.write(' %d/%d [color=#009900]FCs[/color]' % (totals.fc, totals.total))
-    f.write('\n')
+    def isSDG(self):
+        # TODO: there is no way of knowing if this is an SDG without knowing the total number of notes in the song
+        return GOOD_SCORE * self.g + AVERAGE_SCORE * self.a + MISS_SCORE * self.m + BOO_SCORE * self.b < GOOD_SCORE * 10
+
+class Tier:
+    """Class to keep track of per-tier_total data"""
+    def __init__(self):
+        self.count = 0
+        self.sum = 0
+        self.perfect = 0
 
 def extract_levelranks(raw_data):
     # get table columns
@@ -101,7 +118,7 @@ def extract_levelranks(raw_data):
 
 def format_data(levelranks, output_filename, title, write_ld):
     # per-difficulty distribution
-    dd = [Totals() for _ in range(len(difficulties))]
+    dd = [Totals() for _ in range(len(DIFFICULTIES))]
     # per-level distribution
     ld = {}
 
@@ -115,22 +132,20 @@ def format_data(levelranks, output_filename, title, write_ld):
     with open(output_filename, 'a') as f:
         f.write('[b][u]' + title + '[/u][/b]\n\n')
 
-        for i in range(len(difficulties)-1, -1, -1):
+        for i in range(len(DIFFICULTIES)-1, -1, -1):
             if dd[i].aaa == dd[i].total:
                 continue
-            f.write('[color=#FF9900]%s[/color]:' % difficulties[i][0])
-            printAAAsAndFCs(dd[i], f)
+            f.write('[color=#FF9900]%s[/color]:%s' % (DIFFICULTIES[i][0], dd[i].to_string()))
         f.write('\n')
 
         if (write_ld):
             for d, t in sorted(ld.items(), key=lambda x:x[0]):
                 if t.aaa == t.total:
                     continue
-                f.write('[color=#FF9900]%d[/color]:' % d)
-                printAAAsAndFCs(t, f)
+                f.write('[color=#FF9900]%d[/color]:%s' % (d, t.to_string()))
             f.write('\n')
 
-credentials = json.loads(open('credentials', 'r').read())
+credentials = json.loads(open('credentials.json', 'r').read())
 
 # get the username that the stats will be retrieved for
 stats_username = credentials['username']
@@ -168,8 +183,10 @@ class Browser:
         self.br.form['vb_login_password'] = credentials['password']
         self.br.submit()
 
-        # TODO: check if credentials are correct here rather than throwing an error later on
-        # also "Logged in successful / unsuccessful print statements"
+        if 'invalid' in str(self.br.response().read()):
+            print('[+] Invalid username or password. Please update credentials.json')
+        else:
+            print('[+] Login successful!')
 
     def get(self, url):
         print('[+] GET ' + url)
@@ -201,12 +218,12 @@ br.post_stats(open(output_filename, 'r').read())
 
 ##### TIERS #####
 
-tier_mains = br.get(url_tiers).find_all('div', class_='tier_main')
+tier_mains = br.get(url_tiers)('div', class_='tier_main')
 tiers = {}
 
 for tier_main in tier_mains:
-    tier_earned = int(tier_main.find_all('span', class_='tier_earned')[0].string)
-    tier_total = int(tier_main.find_all('span', class_='tier_total')[0].string)
+    tier_earned = int(tier_main('span', class_='tier_earned')[0].string)
+    tier_total = int(tier_main('span', class_='tier_total')[0].string)
 
     if tier_total not in tiers:
         tiers[tier_total] = Tier()
