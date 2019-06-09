@@ -30,7 +30,7 @@ data = {}
 total = 0
 level = 0
 
-while total < 2:
+while total < songs:
     level += 1
     levelstats = br.get(URL_LEVELSTATS_BASE + str(level))
 
