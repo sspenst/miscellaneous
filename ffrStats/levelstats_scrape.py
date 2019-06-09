@@ -30,7 +30,7 @@ data = {}
 total = 0
 level = 0
 
-while total < songs:
+while total < 2:
     level += 1
     levelstats = br.get(url_levelstats_base + str(level))
 
@@ -43,5 +43,5 @@ while total < songs:
         total += 1
         print('%d: %s - %d' % (total, name, notes))
 
-open(output_filename, 'w').write(json.dumps(data, sort_keys=True))
+open(output_filename, 'w').write(json.dumps(data, indent=4, sort_keys=True))
 print('Stats written to ' + output_filename)
