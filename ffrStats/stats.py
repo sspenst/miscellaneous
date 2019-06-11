@@ -6,7 +6,7 @@ need to be AAA'd appear first.
 
 Assumes there is an existing file in this directory named
 'credentials.json' that contains a username and password:
-{'username':'YOUR_USERNAME','password':'YOUR_PASSWORD'}
+{"username":"YOUR_USERNAME","password":"YOUR_PASSWORD"}
 """
 
 from bs4 import BeautifulSoup
@@ -70,16 +70,16 @@ class Totals:
     def to_string(self):
         # TODO: options for colors
         s = ''
-        # print AAA count; only print 0 AAAs if all SDGs and FCs are complete
-        if self.aaa != 0 or (self.sdg == self.total and self.fc == self.total):
+        # print AAA count; only print 0 AAAs if all SDGs are complete
+        if self.aaa != 0 or self.sdg == self.total:
             s += ' %d/%d [color=#D95819]AAAs[/color]' % (self.aaa, self.total)
-        # print SDG count; only print 0 SDGs if all FCs are complete; only print 100% SDGs if not all FCs are complete
-        if (self.sdg != 0 or self.fc == self.total) and (self.sdg != self.total or self.fc != self.total):
+        # print SDG count if there are SDGs remaining; only print 0 SDGs if all FCs are complete
+        if self.sdg != self.total and (self.sdg != 0 or self.fc == self.total):
             s += ' %d/%d [color=#3774FF]SDGs[/color]' % (self.sdg, self.total)
-        # print FC count if there are no FCs remaining
+        # print FC count if there are FCs remaining
         if self.fc != self.total:
             s += ' %d/%d [color=#009900]FCs[/color]' % (self.fc, self.total)
-        # print unplayed count if there are remaining unplayed levels
+        # print unplayed count if there are unplayed levels remaining
         if self.unplayed != 0:
             s += ' %d/%d [color=#999999]Unplayed[/color]' % (self.unplayed, self.total)
         return s + '\n'
@@ -89,7 +89,7 @@ class Levelrank:
     def __init__(self, row, cols):
         self.rank = int(row[cols['rank']].string.replace(',', ''))
         self.d = int(row[cols['d']].string)
-        self.level = row[cols['level']].string.replace('\\', '') # backslash replace is specifically for 'R/\IN'
+        self.level = row[cols['level']].string
         self.score = int(row[cols['score']].string.replace(',', '').replace('*', ''))
         self.fc = '*' in row[cols['score']].string
         self.p = int(row[cols['p']].string.replace(',', ''))
@@ -99,16 +99,16 @@ class Levelrank:
         self.b = int(row[cols['b']].string.replace(',', ''))
         self.c = int(row[cols['c']].string.replace(',', ''))
         self.played = int(row[cols['played']].string.replace(',', ''))
-        self.notes = levelstats[self.level]
+        self.arrows = levelarrows[self.level]
 
     def isAAA(self):
         return self.fc and self.p == self.c and self.b == 0
 
     def isSDG(self):
-        return self.passed() and self.score > PERFECT_SCORE * (self.notes - 10) + GOOD_SCORE * 10
+        return self.passed() and self.score > PERFECT_SCORE * (self.arrows - 10) + GOOD_SCORE * 10
 
     def passed(self):
-        return self.p + self.g + self.a + self.m == self.notes
+        return self.p + self.g + self.a + self.m == self.arrows
 
 class Tier:
     """Class to keep track of per-tier_total data"""
@@ -217,7 +217,7 @@ class Browser:
 br = Browser()
 br.login()
 
-levelstats = json.loads(open('levelstats.json', 'r').read())
+levelarrows = json.loads(open('levelarrows.json', 'r').read())
 
 output_filename = time.strftime('stats-%Y-%m-%d-%H-%M-%S.txt')
 print('[+] Writing stats to ' + output_filename)

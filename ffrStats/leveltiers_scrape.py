@@ -3,7 +3,7 @@ Scrapes all tier requirement data.
 
 Assumes there is an existing file in this directory named
 'credentials.json' that contains a username and password:
-{'username':'YOUR_USERNAME','password':'YOUR_PASSWORD'}
+{"username":"YOUR_USERNAME","password":"YOUR_PASSWORD"}
 """
 
 from bs4 import BeautifulSoup
