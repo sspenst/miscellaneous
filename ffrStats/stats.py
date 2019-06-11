@@ -110,12 +110,12 @@ class Levelrank:
     def passed(self):
         return self.p + self.g + self.a + self.m == self.arrows
 
-class Tier:
-    """Class to keep track of per-tier_total data"""
-    def __init__(self):
-        self.count = 0
-        self.sum = 0
-        self.perfect = 0
+class Leveltier:
+    """Tier points for a level"""
+    def __init__(self, earned, total, d):
+        self.earned = earned
+        self.total = total
+        self.d = d
 
 def extract_levelranks(raw_data):
     # get table columns
@@ -228,25 +228,47 @@ format_data(levelranks, output_filename, 'Public Level Stats', True)
 tokenlevelranks = extract_levelranks(br.get(url_tokenlevelrank))
 format_data(tokenlevelranks, output_filename, 'Token Level Stats', False)
 
-br.post_stats(open(output_filename, 'r').read())
-
 ##### TIERS #####
 
-tier_mains = br.get(url_tiers)('div', class_='tier_main')
-tiers = {}
+alllevelranks = levelranks + tokenlevelranks
 
-for tier_main in tier_mains:
-    tier_earned = int(tier_main('span', class_='tier_earned')[0].string)
-    tier_total = int(tier_main('span', class_='tier_total')[0].string)
+leveltiers = []
+tiertotals = set()
+tierds = set()
 
-    if tier_total not in tiers:
-        tiers[tier_total] = Tier()
+for level, tiers in json.loads(open('leveltiers.json', 'r').read()).items():
+    levelrank = list(filter(lambda x: x.level == level, alllevelranks))[0]
+    total = len(tiers)
+    points = total
 
-    tiers[tier_total].count += 1
-    tiers[tier_total].sum += tier_earned
+    for tier in tiers:
+        if tier != 'Passed' and levelrank.score >= int(tier):
+            break
+        elif tier == 'Passed' and levelrank.passed():
+            break
+        points -= 1
 
-    if tier_earned == tier_total:
-        tiers[tier_total].perfect += 1
+    leveltiers.append(Leveltier(points, total, levelrank.d))
+    tiertotals.add(total)
+    tierds.add(levelrank.d)
 
-print(tabulate(sorted([[t, tiers[t].perfect, tiers[t].count, tiers[t].sum, tiers[t].count * t] for t in tiers], key=lambda x:x[0]),
-    headers=['D', 'Perfect', 'Count', 'Earned', 'Total']))
+with open(output_filename, 'a') as f:
+    f.write('[b][u]Tier Point Stats[/u][/b]\n')
+
+    for tiertotal in sorted(tiertotals):
+        lts = list(filter(lambda x: x.total == tiertotal, leveltiers))
+        earned = sum(lt.earned for lt in lts)
+        total = sum(lt.total for lt in lts)
+        if earned != total:
+            f.write('\n[color=#FF9900]/%d[/color]: %d/%d [color=#CF2222]Points[/color]' % (tiertotal, earned, total))
+
+    f.write('\n')
+
+    for tierd in sorted(tierds):
+        lts = list(filter(lambda x: x.d == tierd, leveltiers))
+        earned = sum(lt.earned for lt in lts)
+        total = sum(lt.total for lt in lts)
+        if earned != total:
+            f.write('\n[color=#FF9900]%d[/color]: %d/%d [color=#CF2222]Points[/color]' % (tierd, earned, total))
+
+br.post_stats(open(output_filename, 'r').read())
