@@ -55,6 +55,8 @@ class Totals:
         self.sdg = 0
         self.fc = 0
         self.unplayed = 0
+        self.tpearned = 0
+        self.tptotal = 0
 
     def add_levelrank(self, levelrank):
         self.total += 1
@@ -82,6 +84,9 @@ class Totals:
         # print unplayed count if there are unplayed levels remaining
         if self.unplayed != 0:
             s += ' %d/%d [color=#999999]Unplayed[/color]' % (self.unplayed, self.total)
+        # print tier points total if there are tier points remaining
+        if self.tpearned != self.tptotal:
+            s += ' %d/%d [color=#CF2222]Tier Points[/color]' % (self.tpearned, self.tptotal)
         return s + '\n'
 
 class Levelrank:
@@ -110,7 +115,7 @@ class Levelrank:
     def passed(self):
         return self.p + self.g + self.a + self.m == self.arrows
 
-class Leveltier:
+class Leveltierpoints:
     """Tier points for a level"""
     def __init__(self, earned, total, d):
         self.earned = earned
@@ -139,6 +144,28 @@ def format_data(levelranks, output_filename, title, write_ld):
         if levelrank.d not in ld:
             ld[levelrank.d] = Totals()
         ld[levelrank.d].add_levelrank(levelrank)
+
+    for level, tiers in leveltiers.items():
+        levelranklist = list(filter(lambda x: x.level == level, levelranks))
+
+        if len(levelranklist) == 0:
+            continue
+
+        levelrank = levelranklist[0]
+        total = len(tiers)
+        points = total
+
+        for tier in tiers:
+            if tier != 'Passed' and levelrank.score >= int(tier):
+                break
+            elif tier == 'Passed' and levelrank.passed():
+                break
+            points -= 1
+
+        dd[get_difficulty_index(levelrank.d)].tpearned += points
+        dd[get_difficulty_index(levelrank.d)].tptotal += total
+        ld[levelrank.d].tpearned += points
+        ld[levelrank.d].tptotal += total
 
     # TODO: probably move this writing part out of this function, or refactor this somehow
     with open(output_filename, 'a') as f:
@@ -218,6 +245,7 @@ br = Browser()
 br.login()
 
 levelarrows = json.loads(open('levelarrows.json', 'r').read())
+leveltiers = json.loads(open('leveltiers.json', 'r').read())
 
 output_filename = time.strftime('stats-%Y-%m-%d-%H-%M-%S.txt')
 print('[+] Writing stats to ' + output_filename)
@@ -232,11 +260,10 @@ format_data(tokenlevelranks, output_filename, 'Token Level Stats', False)
 
 alllevelranks = levelranks + tokenlevelranks
 
-leveltiers = []
+leveltierpoints = []
 tiertotals = set()
-tierds = set()
 
-for level, tiers in json.loads(open('leveltiers.json', 'r').read()).items():
+for level, tiers in leveltiers.items():
     levelrank = list(filter(lambda x: x.level == level, alllevelranks))[0]
     total = len(tiers)
     points = total
@@ -248,27 +275,17 @@ for level, tiers in json.loads(open('leveltiers.json', 'r').read()).items():
             break
         points -= 1
 
-    leveltiers.append(Leveltier(points, total, levelrank.d))
+    leveltierpoints.append(Leveltierpoints(points, total, levelrank.d))
     tiertotals.add(total)
-    tierds.add(levelrank.d)
 
 with open(output_filename, 'a') as f:
     f.write('[b][u]Tier Point Stats[/u][/b]\n')
 
     for tiertotal in sorted(tiertotals):
-        lts = list(filter(lambda x: x.total == tiertotal, leveltiers))
+        lts = list(filter(lambda x: x.total == tiertotal, leveltierpoints))
         earned = sum(lt.earned for lt in lts)
         total = sum(lt.total for lt in lts)
         if earned != total:
             f.write('\n[color=#FF9900]/%d[/color]: %d/%d [color=#CF2222]Points[/color]' % (tiertotal, earned, total))
-
-    f.write('\n')
-
-    for tierd in sorted(tierds):
-        lts = list(filter(lambda x: x.d == tierd, leveltiers))
-        earned = sum(lt.earned for lt in lts)
-        total = sum(lt.total for lt in lts)
-        if earned != total:
-            f.write('\n[color=#FF9900]%d[/color]: %d/%d [color=#CF2222]Points[/color]' % (tierd, earned, total))
 
 br.post_stats(open(output_filename, 'r').read())
