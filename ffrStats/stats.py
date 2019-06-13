@@ -54,7 +54,7 @@ class Totals:
         self.aaa = 0
         self.sdg = 0
         self.fc = 0
-        self.unplayed = 0
+        self.passed = 0
         self.tpearned = 0
         self.tptotal = 0
 
@@ -66,8 +66,8 @@ class Totals:
             self.sdg += 1
         if levelrank.fc:
             self.fc += 1
-        if levelrank.score == 0:
-            self.unplayed += 1
+        if levelrank.passed():
+            self.passed += 1
 
     def to_string(self):
         # TODO: options for colors
@@ -81,9 +81,9 @@ class Totals:
         # print FC count if there are FCs remaining
         if self.fc != self.total:
             s += ' %d/%d [color=#009900]FCs[/color]' % (self.fc, self.total)
-        # print unplayed count if there are unplayed levels remaining
-        if self.unplayed != 0:
-            s += ' %d/%d [color=#999999]Unplayed[/color]' % (self.unplayed, self.total)
+        # print passed count if there are unpassed levels remaining
+        if self.passed != self.total:
+            s += ' %d/%d [color=#999999]Passed[/color]' % (self.passed, self.total)
         # print tier points total if there are tier points remaining
         if self.tpearned != self.tptotal:
             s += ' %d/%d [color=#CF2222]Tier Points[/color]' % (self.tpearned, self.tptotal)
@@ -266,16 +266,16 @@ tiertotals = set()
 for level, tiers in leveltiers.items():
     levelrank = list(filter(lambda x: x.level == level, alllevelranks))[0]
     total = len(tiers)
-    points = total
+    earned = total
 
     for tier in tiers:
         if tier != 'Passed' and levelrank.score >= int(tier):
             break
         elif tier == 'Passed' and levelrank.passed():
             break
-        points -= 1
+        earned -= 1
 
-    leveltierpoints.append(Leveltierpoints(points, total, levelrank.d))
+    leveltierpoints.append(Leveltierpoints(earned, total, levelrank.d))
     tiertotals.add(total)
 
 with open(output_filename, 'a') as f:
@@ -286,6 +286,17 @@ with open(output_filename, 'a') as f:
         earned = sum(lt.earned for lt in lts)
         total = sum(lt.total for lt in lts)
         if earned != total:
-            f.write('\n[color=#FF9900]/%d[/color]: %d/%d [color=#CF2222]Points[/color]' % (tiertotal, earned, total))
+            f.write('\n[color=#FF9900]/%d[/color]: %d/%d [color=#CF2222]Tier Points[/color]' % (tiertotal, earned, total))
+
+    totalaaas = len(list(filter(lambda x: x.isAAA(), alllevelranks)))
+    extratierpoints = max(int(100 * totalaaas / len(alllevelranks)) - 49, 0)
+    maxextratierpoints = 50
+
+    f.write('\n[color=#FF9900]+[/color]: %d/%d [color=#CF2222]Tier Points[/color]' % (extratierpoints, maxextratierpoints))
+
+    earnedtierpoints = sum(l.earned for l in leveltierpoints) + extratierpoints
+    totaltierpoints = sum(l.total for l in leveltierpoints) + maxextratierpoints
+    
+    f.write('\n\n[color=#CF2222]Tier Points[/color]: %d/%d %.1f%%' % (earnedtierpoints, totaltierpoints, 100 * earnedtierpoints / totaltierpoints))
 
 br.post_stats(open(output_filename, 'r').read())
