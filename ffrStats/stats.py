@@ -18,6 +18,14 @@ import re
 import sys
 import time
 
+# colors
+HEX_D = "FF9900"
+HEX_AAA = "D95819"
+HEX_SDG = "3774FF"
+HEX_FC = "009900"
+HEX_PASS = "999999"
+HEX_TP = "CF2222"
+
 # raw scoring values
 PERFECT_SCORE = 50
 GOOD_SCORE = 25
@@ -70,23 +78,22 @@ class Totals:
             self.passed += 1
 
     def to_string(self):
-        # TODO: options for colors
         s = ''
         # print AAA count; only print 0 AAAs if all SDGs are complete
         if self.aaa != 0 or self.sdg == self.total:
-            s += ' %d/%d [color=#D95819]AAAs[/color]' % (self.aaa, self.total)
+            s += ' %d/%d [color=#%s]AAAs[/color]' % (self.aaa, self.total, HEX_AAA)
         # print SDG count if there are SDGs remaining; only print 0 SDGs if all FCs are complete
         if self.sdg != self.total and (self.sdg != 0 or self.fc == self.total):
-            s += ' %d/%d [color=#3774FF]SDGs[/color]' % (self.sdg, self.total)
+            s += ' %d/%d [color=#%s]SDGs[/color]' % (self.sdg, self.total, HEX_SDG)
         # print FC count if there are FCs remaining
         if self.fc != self.total:
-            s += ' %d/%d [color=#009900]FCs[/color]' % (self.fc, self.total)
+            s += ' %d/%d [color=#%s]FCs[/color]' % (self.fc, self.total, HEX_FC)
         # print passed count if there are unpassed levels remaining
         if self.passed != self.total:
-            s += ' %d/%d [color=#999999]Passed[/color]' % (self.passed, self.total)
+            s += ' %d/%d [color=#%s]Pass[/color]' % (self.passed, self.total, HEX_PASS)
         # print tier points total if there are tier points remaining
         if self.tpearned != self.tptotal:
-            s += ' %d/%d [color=#CF2222]Tier Points[/color]' % (self.tpearned, self.tptotal)
+            s += ' %d/%d [color=#%s]TPs[/color]' % (self.tpearned, self.tptotal, HEX_TP)
         return s + '\n'
 
 class Levelrank:
@@ -138,12 +145,14 @@ def format_data(levelranks, output_filename, title, write_ld):
     dd = [Totals() for _ in range(len(DIFFICULTIES))]
     # per-level distribution
     ld = {}
+    totals = Totals()
 
     for levelrank in levelranks:
         dd[get_difficulty_index(levelrank.d)].add_levelrank(levelrank)
         if levelrank.d not in ld:
             ld[levelrank.d] = Totals()
         ld[levelrank.d].add_levelrank(levelrank)
+        totals.add_levelrank(levelrank)
 
     for level, tiers in leveltiers.items():
         levelranklist = list(filter(lambda x: x.level == level, levelranks))
@@ -166,6 +175,8 @@ def format_data(levelranks, output_filename, title, write_ld):
         dd[get_difficulty_index(levelrank.d)].tptotal += total
         ld[levelrank.d].tpearned += points
         ld[levelrank.d].tptotal += total
+        totals.tpearned += points
+        totals.tptotal += total
 
     # TODO: probably move this writing part out of this function, or refactor this somehow
     with open(output_filename, 'a') as f:
@@ -174,15 +185,22 @@ def format_data(levelranks, output_filename, title, write_ld):
         for i in range(len(DIFFICULTIES)-1, -1, -1):
             if dd[i].aaa == dd[i].total:
                 continue
-            f.write('[color=#FF9900]%s[/color]:%s' % (DIFFICULTIES[i][0], dd[i].to_string()))
+            f.write('[color=#%s]%s[/color]:%s' % (HEX_D, DIFFICULTIES[i][0], dd[i].to_string()))
         f.write('\n')
 
         if (write_ld):
             for d, t in sorted(ld.items(), key=lambda x:x[0]):
                 if t.aaa == t.total:
                     continue
-                f.write('[color=#FF9900]%d[/color]:%s' % (d, t.to_string()))
+                f.write('[color=#%s]%d[/color]:%s' % (HEX_D, d, t.to_string()))
             f.write('\n')
+
+        f.write('[color=#%s]AAAs[/color]: %d/%d %.1f%%\n' % (HEX_AAA, totals.aaa, totals.total, 100 * totals.aaa / totals.total))
+        f.write('[color=#%s]SDGs[/color]: %d/%d %.1f%%\n' % (HEX_SDG, totals.sdg, totals.total, 100 * totals.sdg / totals.total))
+        f.write('[color=#%s]FCs[/color]: %d/%d %.1f%%\n' % (HEX_FC, totals.fc, totals.total, 100 * totals.fc / totals.total))
+        f.write('[color=#%s]Pass[/color]: %d/%d %.1f%%\n' % (HEX_PASS, totals.passed, totals.total, 100 * totals.passed / totals.total))
+        f.write('[color=#%s]TPs[/color]: %d/%d %.1f%%\n' % (HEX_TP, totals.tpearned, totals.tptotal, 100 * totals.tpearned / totals.tptotal))
+        f.write('\n')
 
 credentials = json.loads(open('credentials.json', 'r').read())
 
@@ -286,17 +304,17 @@ with open(output_filename, 'a') as f:
         earned = sum(lt.earned for lt in lts)
         total = sum(lt.total for lt in lts)
         if earned != total:
-            f.write('\n[color=#FF9900]/%d[/color]: %d/%d [color=#CF2222]Tier Points[/color]' % (tiertotal, earned, total))
+            f.write('\n[color=#%s]/%d[/color]: %d/%d [color=#%s]TPs[/color]' % (HEX_D, tiertotal, earned, total, HEX_TP))
 
     totalaaas = len(list(filter(lambda x: x.isAAA(), alllevelranks)))
     extratierpoints = max(int(100 * totalaaas / len(alllevelranks)) - 49, 0)
     maxextratierpoints = 50
 
-    f.write('\n[color=#FF9900]+[/color]: %d/%d [color=#CF2222]Tier Points[/color]' % (extratierpoints, maxextratierpoints))
+    f.write('\n[color=#%s]+[/color]: %d/%d [color=#%s]TPs[/color]' % (HEX_D, extratierpoints, maxextratierpoints, HEX_TP))
 
     earnedtierpoints = sum(l.earned for l in leveltierpoints) + extratierpoints
     totaltierpoints = sum(l.total for l in leveltierpoints) + maxextratierpoints
     
-    f.write('\n\n[color=#CF2222]Tier Points[/color]: %d/%d %.1f%%' % (earnedtierpoints, totaltierpoints, 100 * earnedtierpoints / totaltierpoints))
+    f.write('\n\n[color=#%s]TPs[/color]: %d/%d %.1f%%' % (HEX_TP, earnedtierpoints, totaltierpoints, 100 * earnedtierpoints / totaltierpoints))
 
 br.post_stats(open(output_filename, 'r').read())
