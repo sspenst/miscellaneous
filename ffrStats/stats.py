@@ -90,7 +90,7 @@ class Totals:
             s += ' %d/%d [color=#%s]FCs[/color]' % (self.fc, self.total, HEX_FC)
         # print passed count if there are unpassed levels remaining
         if self.passed != self.total:
-            s += ' %d/%d [color=#%s]Pass[/color]' % (self.passed, self.total, HEX_PASS)
+            s += ' %d/%d [color=#%s]Passed[/color]' % (self.passed, self.total, HEX_PASS)
         # print tier points total if there are tier points remaining
         if self.tpearned != self.tptotal:
             s += ' %d/%d [color=#%s]TPs[/color]' % (self.tpearned, self.tptotal, HEX_TP)
@@ -198,7 +198,7 @@ def format_data(levelranks, output_filename, title, write_ld):
         f.write('[color=#%s]AAAs[/color]: %d/%d %.1f%%\n' % (HEX_AAA, totals.aaa, totals.total, 100 * totals.aaa / totals.total))
         f.write('[color=#%s]SDGs[/color]: %d/%d %.1f%%\n' % (HEX_SDG, totals.sdg, totals.total, 100 * totals.sdg / totals.total))
         f.write('[color=#%s]FCs[/color]: %d/%d %.1f%%\n' % (HEX_FC, totals.fc, totals.total, 100 * totals.fc / totals.total))
-        f.write('[color=#%s]Pass[/color]: %d/%d %.1f%%\n' % (HEX_PASS, totals.passed, totals.total, 100 * totals.passed / totals.total))
+        f.write('[color=#%s]Passed[/color]: %d/%d %.1f%%\n' % (HEX_PASS, totals.passed, totals.total, 100 * totals.passed / totals.total))
         f.write('[color=#%s]TPs[/color]: %d/%d %.1f%%\n' % (HEX_TP, totals.tpearned, totals.tptotal, 100 * totals.tpearned / totals.tptotal))
         f.write('\n')
 
