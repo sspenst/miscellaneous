@@ -13,6 +13,7 @@ from bs4 import BeautifulSoup
 from collections import OrderedDict
 from tabulate import tabulate
 import json
+import math
 import mechanize
 import re
 import sys
@@ -20,6 +21,7 @@ import time
 
 # colors
 HEX_D = "FF9900"
+HEX_EQ = "AA66DD"
 HEX_AAA = "D95819"
 HEX_SDG = "3774FF"
 HEX_FC = "009900"
@@ -65,6 +67,7 @@ class Totals:
         self.passed = 0
         self.tpearned = 0
         self.tptotal = 0
+        self.eqt = 0
 
     def add_levelrank(self, levelrank):
         self.total += 1
@@ -76,14 +79,18 @@ class Totals:
             self.fc += 1
         if levelrank.passed():
             self.passed += 1
+            #self.eqt += levelrank.AAAeq()
 
-    def to_string(self):
+    def to_string(self, show_eq):
         s = ''
+        # print average AAA equivalency
+        if show_eq:
+            s += ' %.2f [color=#%s]EQ[/color]' % (self.eqt / self.passed, HEX_EQ)
         # print AAA count; only print 0 AAAs if all SDGs are complete
         if self.aaa != 0 or self.sdg == self.total:
             s += ' %d/%d [color=#%s]AAAs[/color]' % (self.aaa, self.total, HEX_AAA)
-        # print SDG count if there are SDGs remaining; only print 0 SDGs if all FCs are complete
-        if self.sdg != self.total and (self.sdg != 0 or self.fc == self.total):
+        # print SDG count if there are SDGs remaining
+        if self.sdg != self.total:
             s += ' %d/%d [color=#%s]SDGs[/color]' % (self.sdg, self.total, HEX_SDG)
         # print FC count if there are FCs remaining
         if self.fc != self.total:
@@ -121,6 +128,21 @@ class Levelrank:
 
     def passed(self):
         return self.p + self.g + self.a + self.m == self.arrows
+
+    def NGC(self):
+        return self.g + 1.8 * self.a + 2.4 * self.m + 0.2 * self.b
+
+    def AAAeq(self):
+        a0 = 17678803623.9633
+        a1 = 733763392.922176
+        a2 = 28163834.4879901
+        a3 = -434698.513947563
+        a4 = 3060.24243867853
+        delta = a0 + a1 * self.d + a2 * self.d * self.d + a3 * math.pow(self.d, 3) + a4 * math.pow(self.d, 4)
+        lamb = 18206628.7286425
+        alpha = 9.97503967400340
+        beta = 0.0193296437339205
+        return (self.d + alpha) * math.pow((delta - self.NGC() * lamb) / delta, 1 / beta) - alpha
 
 class Leveltierpoints:
     """Tier points for a level"""
@@ -185,14 +207,24 @@ def format_data(levelranks, output_filename, title, write_ld):
         for i in range(len(DIFFICULTIES)-1, -1, -1):
             if dd[i].aaa == dd[i].total:
                 continue
-            f.write('[color=#%s]%s[/color]:%s' % (HEX_D, DIFFICULTIES[i][0], dd[i].to_string()))
+            f.write('[color=#%s]%s[/color]:%s' % (HEX_D, DIFFICULTIES[i][0], dd[i].to_string(False)))
         f.write('\n')
 
         if (write_ld):
+            # consecutive = 0
+            # start_d = 0
+
             for d, t in sorted(ld.items(), key=lambda x:x[0]):
                 if t.aaa == t.total:
+                #     if start_d == 0:
+                #         start_d = d
+                #     consecutive += t.aaa
                     continue
-                f.write('[color=#%s]%d[/color]:%s' % (HEX_D, d, t.to_string()))
+                # elif consecutive > 0:
+                #     f.write('[color=#%s]%d[/color]-[color=#%s]%d[/color]: %d/%d [color=#%s]AAAs[/color]\n' % (HEX_D, start_d, HEX_D, d-1, consecutive, consecutive, HEX_AAA))
+                #     consecutive = 0
+                #     start_d = 0
+                f.write('[color=#%s]%d[/color]:%s' % (HEX_D, d, t.to_string(False)))
             f.write('\n')
 
         f.write('[color=#%s]AAAs[/color]: %d/%d %.1f%%\n' % (HEX_AAA, totals.aaa, totals.total, 100 * totals.aaa / totals.total))
@@ -292,6 +324,9 @@ for level, tiers in leveltiers.items():
         elif tier == 'Passed' and levelrank.passed():
             break
         earned -= 1
+
+    # if total == 7:
+    #     print('%d/%d %d %s' % (earned, total, levelrank.d, levelrank.level))
 
     leveltierpoints.append(Leveltierpoints(earned, total, levelrank.d))
     tiertotals.add(total)
