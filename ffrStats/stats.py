@@ -81,23 +81,27 @@ class Totals:
             self.passed += 1
             #self.eqt += levelrank.AAAeq()
 
-    def to_string(self, show_eq):
+    def to_string(self, show_eq, is_token):
         s = ''
+        denominator = self.passed if is_token else self.total
         # print average AAA equivalency
         if show_eq:
             s += ' %.2f [color=#%s]EQ[/color]' % (self.eqt / self.passed, HEX_EQ)
         # print AAA count; only print 0 AAAs if all SDGs are complete
-        if self.aaa != 0 or self.sdg == self.total:
-            s += ' %d/%d [color=#%s]AAAs[/color]' % (self.aaa, self.total, HEX_AAA)
+        if self.aaa != 0 or self.sdg == denominator:
+            s += ' %d/%d [color=#%s]AAAs[/color]' % (self.aaa, denominator, HEX_AAA)
         # print SDG count if there are SDGs remaining
-        if self.sdg != self.total:
-            s += ' %d/%d [color=#%s]SDGs[/color]' % (self.sdg, self.total, HEX_SDG)
+        if self.sdg != denominator:
+            s += ' %d/%d [color=#%s]SDGs[/color]' % (self.sdg, denominator, HEX_SDG)
         # print FC count if there are FCs remaining
-        if self.fc != self.total:
-            s += ' %d/%d [color=#%s]FCs[/color]' % (self.fc, self.total, HEX_FC)
+        if self.fc != denominator:
+            s += ' %d/%d [color=#%s]FCs[/color]' % (self.fc, denominator, HEX_FC)
         # print passed count if there are unpassed levels remaining
         if self.passed != self.total:
-            s += ' %d/%d [color=#%s]Passed[/color]' % (self.passed, self.total, HEX_PASS)
+            if is_token:
+                s += ' %d/%d [color=#%s]Unlocked[/color]' % (self.passed, self.total, HEX_PASS)
+            else:
+                s += ' %d/%d [color=#%s]Passed[/color]' % (self.passed, self.total, HEX_PASS)
         # print tier points total if there are tier points remaining
         if self.tpearned != self.tptotal:
             s += ' %d/%d [color=#%s]TPs[/color]' % (self.tpearned, self.tptotal, HEX_TP)
@@ -162,7 +166,7 @@ def extract_levelranks(raw_data):
 
     return [Levelrank(tr('td'), cols) for tr in raw_data('tr')[1:]]
 
-def format_data(levelranks, output_filename, title, write_ld):
+def format_data(levelranks, output_filename, title, write_ld, is_token):
     # per-difficulty distribution
     dd = [Totals() for _ in range(len(DIFFICULTIES))]
     # per-level distribution
@@ -207,7 +211,7 @@ def format_data(levelranks, output_filename, title, write_ld):
         for i in range(len(DIFFICULTIES)-1, -1, -1):
             if dd[i].aaa == dd[i].total:
                 continue
-            f.write('[color=#%s]%s[/color]:%s' % (HEX_D, DIFFICULTIES[i][0], dd[i].to_string(False)))
+            f.write('[color=#%s]%s[/color]:%s' % (HEX_D, DIFFICULTIES[i][0], dd[i].to_string(False, is_token)))
         f.write('\n')
 
         if (write_ld):
@@ -215,22 +219,33 @@ def format_data(levelranks, output_filename, title, write_ld):
             # start_d = 0
 
             for d, t in sorted(ld.items(), key=lambda x:x[0]):
+                if d >= 103:
+                    break
+
                 if t.aaa == t.total:
-                #     if start_d == 0:
-                #         start_d = d
-                #     consecutive += t.aaa
+                    # if start_d == 0:
+                    #     start_d = d
+                    # consecutive += t.aaa
                     continue
                 # elif consecutive > 0:
-                #     f.write('[color=#%s]%d[/color]-[color=#%s]%d[/color]: %d/%d [color=#%s]AAAs[/color]\n' % (HEX_D, start_d, HEX_D, d-1, consecutive, consecutive, HEX_AAA))
+                #     if start_d != d-1:
+                #         f.write('[color=#%s]%d[/color]-[color=#%s]%d[/color]: %d/%d [color=#%s]AAAs[/color]\n' % (HEX_D, start_d, HEX_D, d-1, consecutive, consecutive, HEX_AAA))
+                #     else:
+                #         f.write('[color=#%s]%d[/color]: %d/%d [color=#%s]AAAs[/color]\n' % (HEX_D, start_d, consecutive, consecutive, HEX_AAA))
                 #     consecutive = 0
                 #     start_d = 0
-                f.write('[color=#%s]%d[/color]:%s' % (HEX_D, d, t.to_string(False)))
+                f.write('[color=#%s]%d[/color]:%s' % (HEX_D, d, t.to_string(False, is_token)))
             f.write('\n')
 
-        f.write('[color=#%s]AAAs[/color]: %d/%d %.1f%%\n' % (HEX_AAA, totals.aaa, totals.total, 100 * totals.aaa / totals.total))
-        f.write('[color=#%s]SDGs[/color]: %d/%d %.1f%%\n' % (HEX_SDG, totals.sdg, totals.total, 100 * totals.sdg / totals.total))
-        f.write('[color=#%s]FCs[/color]: %d/%d %.1f%%\n' % (HEX_FC, totals.fc, totals.total, 100 * totals.fc / totals.total))
-        f.write('[color=#%s]Passed[/color]: %d/%d %.1f%%\n' % (HEX_PASS, totals.passed, totals.total, 100 * totals.passed / totals.total))
+        denominator = totals.passed if is_token else totals.total
+
+        f.write('[color=#%s]AAAs[/color]: %d/%d %.1f%%\n' % (HEX_AAA, totals.aaa, denominator, 100 * totals.aaa / denominator))
+        f.write('[color=#%s]SDGs[/color]: %d/%d %.1f%%\n' % (HEX_SDG, totals.sdg, denominator, 100 * totals.sdg / denominator))
+        f.write('[color=#%s]FCs[/color]: %d/%d %.1f%%\n' % (HEX_FC, totals.fc, denominator, 100 * totals.fc / denominator))
+        if is_token:
+            f.write('[color=#%s]Unlocked[/color]: %d/%d %.1f%%\n' % (HEX_PASS, totals.passed, totals.total, 100 * totals.passed / totals.total))
+        else:
+            f.write('[color=#%s]Passed[/color]: %d/%d %.1f%%\n' % (HEX_PASS, totals.passed, totals.total, 100 * totals.passed / totals.total))
         f.write('[color=#%s]TPs[/color]: %d/%d %.1f%%\n' % (HEX_TP, totals.tpearned, totals.tptotal, 100 * totals.tpearned / totals.tptotal))
         f.write('\n')
 
@@ -301,10 +316,10 @@ output_filename = time.strftime('stats-%Y-%m-%d-%H-%M-%S.txt')
 print('[+] Writing stats to ' + output_filename)
 
 levelranks = extract_levelranks(br.get(url_levelrank))
-format_data(levelranks, output_filename, 'Public Level Stats', True)
+format_data(levelranks, output_filename, 'Public Level Stats', True, False)
 
 tokenlevelranks = extract_levelranks(br.get(url_tokenlevelrank))
-format_data(tokenlevelranks, output_filename, 'Token Level Stats', False)
+format_data(tokenlevelranks, output_filename, 'Token Level Stats', False, True)
 
 ##### TIERS #####
 
