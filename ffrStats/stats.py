@@ -1,8 +1,7 @@
 """
-Collects all FFR level rank data (excluding token level ranks) given a
-user's credentials and stores the results in 'output_file'. The reuslts
-are ordered so that the easiest and lowest ranking levels that still
-need to be AAA'd appear first.
+Collects all FFR level rank and tier point data for a user.
+The data is formatted into a collection of stats which are posted 
+to the given random thought id.
 
 Assumes there is an existing file in this directory named
 'credentials.json' that contains a username and password:
@@ -19,9 +18,18 @@ import re
 import sys
 import time
 
+# config
+HIDE_ZERO_DIFFICULTY = True
+MAX_DIFFICULTY_LEVEL_TOTAL = 102
+RANDOM_THOUGHT_ID = '234639'
+SHOW_PASSED = False
+
+# URLs
+URL_BASE = 'http://www.flashflashrevolution.com'
+URL_POST = URL_BASE + '/profile/edit/thoughts/' + RANDOM_THOUGHT_ID
+
 # colors
 HEX_D = "FF9900"
-HEX_EQ = "AA66DD"
 HEX_AAA = "D95819"
 HEX_SDG = "3774FF"
 HEX_FC = "009900"
@@ -35,6 +43,7 @@ AVERAGE_SCORE = 5
 MISS_SCORE = -10
 BOO_SCORE = -5
 
+# data
 DIFFICULTIES = [
     ('Brutal', 100),
     ('Guru', 85),
@@ -51,224 +60,8 @@ DIFFICULTIES = [
     ('Easiest', 1),
     ('Zero', 0)
 ]
-
-def get_difficulty_index(d):
-    for i in range(len(DIFFICULTIES)):
-        if d >= DIFFICULTIES[i][1]:
-            return i
-
-class Totals:
-    """Used for keeping track of totals"""
-    def __init__(self):
-        self.total = 0
-        self.aaa = 0
-        self.sdg = 0
-        self.fc = 0
-        self.passed = 0
-        self.tpearned = 0
-        self.tptotal = 0
-        self.eqt = 0
-
-    def add_levelrank(self, levelrank):
-        self.total += 1
-        if levelrank.isAAA():
-            self.aaa += 1
-        if levelrank.isSDG():
-            self.sdg += 1
-        if levelrank.fc:
-            self.fc += 1
-        if levelrank.passed():
-            self.passed += 1
-            #self.eqt += levelrank.AAAeq()
-
-    def to_string(self, show_eq, is_token):
-        s = ''
-        denominator = self.passed if is_token else self.total
-        # print average AAA equivalency
-        if show_eq:
-            s += ' %.2f [color=#%s]EQ[/color]' % (self.eqt / self.passed, HEX_EQ)
-        # print AAA count; only print 0 AAAs if all SDGs are complete
-        if self.aaa != 0 or self.sdg == denominator:
-            s += ' %d/%d [color=#%s]AAAs[/color]' % (self.aaa, denominator, HEX_AAA)
-        # print SDG count if there are SDGs remaining
-        if self.sdg != denominator:
-            s += ' %d/%d [color=#%s]SDGs[/color]' % (self.sdg, denominator, HEX_SDG)
-        # print FC count if there are FCs remaining
-        if self.fc != denominator:
-            s += ' %d/%d [color=#%s]FCs[/color]' % (self.fc, denominator, HEX_FC)
-        # print passed count if there are unpassed levels remaining
-        if self.passed != self.total:
-            if is_token:
-                s += ' %d/%d [color=#%s]Unlocked[/color]' % (self.passed, self.total, HEX_PASS)
-            else:
-                s += ' %d/%d [color=#%s]Passed[/color]' % (self.passed, self.total, HEX_PASS)
-        # print tier points total if there are tier points remaining
-        if self.tpearned != self.tptotal:
-            s += ' %d/%d [color=#%s]TPs[/color]' % (self.tpearned, self.tptotal, HEX_TP)
-        return s + '\n'
-
-class Levelrank:
-    """A row of levelrank data"""
-    def __init__(self, row, cols):
-        self.rank = int(row[cols['rank']].string.replace(',', ''))
-        self.d = int(row[cols['d']].string)
-        self.level = row[cols['level']].string
-        self.score = int(row[cols['score']].string.replace(',', '').replace('*', ''))
-        self.fc = '*' in row[cols['score']].string
-        self.p = int(row[cols['p']].string.replace(',', ''))
-        self.g = int(row[cols['g']].string.replace(',', ''))
-        self.a = int(row[cols['a']].string.replace(',', ''))
-        self.m = int(row[cols['m']].string.replace(',', ''))
-        self.b = int(row[cols['b']].string.replace(',', ''))
-        self.c = int(row[cols['c']].string.replace(',', ''))
-        self.played = int(row[cols['played']].string.replace(',', ''))
-        self.arrows = levelarrows[self.level]
-
-    def isAAA(self):
-        return self.fc and self.p == self.c and self.b == 0
-
-    def isSDG(self):
-        return self.passed() and self.score > PERFECT_SCORE * (self.arrows - 10) + GOOD_SCORE * 10
-
-    def passed(self):
-        return self.p + self.g + self.a + self.m == self.arrows
-
-    def NGC(self):
-        return self.g + 1.8 * self.a + 2.4 * self.m + 0.2 * self.b
-
-    def AAAeq(self):
-        a0 = 17678803623.9633
-        a1 = 733763392.922176
-        a2 = 28163834.4879901
-        a3 = -434698.513947563
-        a4 = 3060.24243867853
-        delta = a0 + a1 * self.d + a2 * self.d * self.d + a3 * math.pow(self.d, 3) + a4 * math.pow(self.d, 4)
-        lamb = 18206628.7286425
-        alpha = 9.97503967400340
-        beta = 0.0193296437339205
-        return (self.d + alpha) * math.pow((delta - self.NGC() * lamb) / delta, 1 / beta) - alpha
-
-class Leveltierpoints:
-    """Tier points for a level"""
-    def __init__(self, earned, total, d):
-        self.earned = earned
-        self.total = total
-        self.d = d
-
-def extract_levelranks(raw_data):
-    # get table columns
-    cols = {}
-    for i, th in enumerate(raw_data('tr')[0]('th')):
-        if th.span:
-            # remove arrow from table headers
-            th.span.extract()
-        cols[th.string.lower()] = i
-
-    return [Levelrank(tr('td'), cols) for tr in raw_data('tr')[1:]]
-
-def format_data(levelranks, output_filename, title, write_ld, is_token):
-    # per-difficulty distribution
-    dd = [Totals() for _ in range(len(DIFFICULTIES))]
-    # per-level distribution
-    ld = {}
-    totals = Totals()
-
-    for levelrank in levelranks:
-        dd[get_difficulty_index(levelrank.d)].add_levelrank(levelrank)
-        if levelrank.d not in ld:
-            ld[levelrank.d] = Totals()
-        ld[levelrank.d].add_levelrank(levelrank)
-        totals.add_levelrank(levelrank)
-
-    for level, tiers in leveltiers.items():
-        levelranklist = list(filter(lambda x: x.level == level, levelranks))
-
-        if len(levelranklist) == 0:
-            continue
-
-        levelrank = levelranklist[0]
-        total = len(tiers)
-        points = total
-
-        for tier in tiers:
-            if tier != 'Passed' and levelrank.score >= int(tier):
-                break
-            elif tier == 'Passed' and levelrank.passed():
-                break
-            points -= 1
-
-        dd[get_difficulty_index(levelrank.d)].tpearned += points
-        dd[get_difficulty_index(levelrank.d)].tptotal += total
-        ld[levelrank.d].tpearned += points
-        ld[levelrank.d].tptotal += total
-        totals.tpearned += points
-        totals.tptotal += total
-
-    # TODO: probably move this writing part out of this function, or refactor this somehow
-    with open(output_filename, 'a') as f:
-        f.write('[b][u]' + title + '[/u][/b]\n\n')
-
-        for i in range(len(DIFFICULTIES)-1, -1, -1):
-            if dd[i].aaa == dd[i].total:
-                continue
-            f.write('[color=#%s]%s[/color]:%s' % (HEX_D, DIFFICULTIES[i][0], dd[i].to_string(False, is_token)))
-        f.write('\n')
-
-        if (write_ld):
-            # consecutive = 0
-            # start_d = 0
-
-            for d, t in sorted(ld.items(), key=lambda x:x[0]):
-                if d >= 103:
-                    break
-
-                if t.aaa == t.total:
-                    # if start_d == 0:
-                    #     start_d = d
-                    # consecutive += t.aaa
-                    continue
-                # elif consecutive > 0:
-                #     if start_d != d-1:
-                #         f.write('[color=#%s]%d[/color]-[color=#%s]%d[/color]: %d/%d [color=#%s]AAAs[/color]\n' % (HEX_D, start_d, HEX_D, d-1, consecutive, consecutive, HEX_AAA))
-                #     else:
-                #         f.write('[color=#%s]%d[/color]: %d/%d [color=#%s]AAAs[/color]\n' % (HEX_D, start_d, consecutive, consecutive, HEX_AAA))
-                #     consecutive = 0
-                #     start_d = 0
-                f.write('[color=#%s]%d[/color]:%s' % (HEX_D, d, t.to_string(False, is_token)))
-            f.write('\n')
-
-        denominator = totals.passed if is_token else totals.total
-
-        f.write('[color=#%s]AAAs[/color]: %d/%d %.1f%%\n' % (HEX_AAA, totals.aaa, denominator, 100 * totals.aaa / denominator))
-        f.write('[color=#%s]SDGs[/color]: %d/%d %.1f%%\n' % (HEX_SDG, totals.sdg, denominator, 100 * totals.sdg / denominator))
-        f.write('[color=#%s]FCs[/color]: %d/%d %.1f%%\n' % (HEX_FC, totals.fc, denominator, 100 * totals.fc / denominator))
-        if is_token:
-            f.write('[color=#%s]Unlocked[/color]: %d/%d %.1f%%\n' % (HEX_PASS, totals.passed, totals.total, 100 * totals.passed / totals.total))
-        else:
-            f.write('[color=#%s]Passed[/color]: %d/%d %.1f%%\n' % (HEX_PASS, totals.passed, totals.total, 100 * totals.passed / totals.total))
-        f.write('[color=#%s]TPs[/color]: %d/%d %.1f%%\n' % (HEX_TP, totals.tpearned, totals.tptotal, 100 * totals.tpearned / totals.tptotal))
-        f.write('\n')
-
-credentials = json.loads(open('credentials.json', 'r').read())
-
-# get the username that the stats will be retrieved for
-stats_username = credentials['username']
-if len(sys.argv) == 2:
-    stats_username = sys.argv[1]
-elif len(sys.argv) != 1:
-    print('Invalid argument format. Please call this script with the following format:')
-    print('\tpython3 stats.py <OPTIONAL:stats_username>')
-    sys.exit()
-
-# TODO: provide an option for which random thought is used, and throw an error if the thought is invalid?
-random_thought_id = '234639'
-
-# URLs
-url_base = 'http://www.flashflashrevolution.com'
-url_levelrank = url_base + '/levelrank.php?sub=' + stats_username
-url_tokenlevelrank = url_base + '/levelrank_special.php?sub=' + stats_username
-url_tiers = url_base + '/FFRStats/level_tiers.php'
-url_post = url_base + '/profile/edit/thoughts/' + random_thought_id
+LEVEL_ARROWS = json.loads(open('levelarrows.json', 'r').read())
+LEVEL_TIERS = json.loads(open('leveltiers.json', 'r').read())
 
 class Browser:
     def __init__(self):
@@ -277,9 +70,9 @@ class Browser:
         self.br.set_handle_robots(False)
         self.br.addheaders = [('User-agent', 'Mozilla/5.0')]
 
-    def login(self):
-        print('[+] GET ' + url_base)
-        self.br.open(url_base)
+    def login(self, credentials):
+        print('[+] GET ' + URL_BASE)
+        self.br.open(URL_BASE)
 
         print('[+] Logging in with credentials...')
         self.br.select_form(nr=0)
@@ -298,73 +91,222 @@ class Browser:
         return BeautifulSoup(data, 'html.parser', from_encoding='iso-8859-1')
 
     def post_stats(self, body):
-        print('[+] GET ' + url_post)
-        self.br.open(url_post)
+        print('[+] GET ' + URL_POST)
+        self.br.open(URL_POST)
         self.br.select_form(nr=0)
-        self.br.form['blog_title'] = 'Stats'
+        self.br.form['blog_title'] = time.strftime('Stats - %b %d, %Y')
         self.br.form['blog_post'] = body
         self.br.submit()
-        print('[+] Stats posted to ' + random_thought_id)
+        print('[+] Stats posted to random thought ' + RANDOM_THOUGHT_ID)
 
-br = Browser()
-br.login()
+class Levelrank:
+    """A row of levelrank data"""
+    def __init__(self, row, cols):
+        self.rank = int(row[cols['rank']].string.replace(',', ''))
+        self.d = int(row[cols['d']].string)
+        self.level = row[cols['level']].string
+        self.score = int(row[cols['score']].string.replace(',', '').replace('*', ''))
+        self.fc = '*' in row[cols['score']].string
+        self.p = int(row[cols['p']].string.replace(',', ''))
+        self.g = int(row[cols['g']].string.replace(',', ''))
+        self.a = int(row[cols['a']].string.replace(',', ''))
+        self.m = int(row[cols['m']].string.replace(',', ''))
+        self.b = int(row[cols['b']].string.replace(',', ''))
+        self.c = int(row[cols['c']].string.replace(',', ''))
+        self.played = int(row[cols['played']].string.replace(',', ''))
+        self.arrows = LEVEL_ARROWS[self.level]
+        self.tp = 0
+        self.tpmax = 0
 
-levelarrows = json.loads(open('levelarrows.json', 'r').read())
-leveltiers = json.loads(open('leveltiers.json', 'r').read())
+        if self.level in LEVEL_TIERS:
+            tiers = LEVEL_TIERS[self.level]
+            self.tpmax = len(tiers)
+            self.tp = self.tpmax
 
-output_filename = time.strftime('stats-%Y-%m-%d-%H-%M-%S.txt')
-print('[+] Writing stats to ' + output_filename)
+            for tier in tiers:
+                if tier != 'Passed' and self.score >= int(tier):
+                    break
+                elif tier == 'Passed' and self.passed():
+                    break
+                self.tp -= 1
 
-levelranks = extract_levelranks(br.get(url_levelrank))
-format_data(levelranks, output_filename, 'Public Level Stats', True, False)
+    def isAAA(self):
+        return self.fc and self.p == self.c and self.b == 0
 
-tokenlevelranks = extract_levelranks(br.get(url_tokenlevelrank))
-format_data(tokenlevelranks, output_filename, 'Token Level Stats', False, True)
+    def isSDG(self):
+        return self.passed() and self.score > PERFECT_SCORE * (self.arrows - 10) + GOOD_SCORE * 10
 
-##### TIERS #####
+    def passed(self):
+        return self.p + self.g + self.a + self.m == self.arrows
 
-alllevelranks = levelranks + tokenlevelranks
+class Totals:
+    """Used for keeping track of totals"""
+    def __init__(self):
+        self.total = 0
+        self.aaa = 0
+        self.sdg = 0
+        self.fc = 0
+        self.passed = 0
+        self.tpearned = 0
+        self.tptotal = 0
 
-leveltierpoints = []
-tiertotals = set()
+    def add_levelrank(self, levelrank):
+        self.total += 1
+        self.tpearned += levelrank.tp
+        self.tptotal += levelrank.tpmax
+        if levelrank.isAAA():
+            self.aaa += 1
+        if levelrank.isSDG():
+            self.sdg += 1
+        if levelrank.fc:
+            self.fc += 1
+        if levelrank.passed():
+            self.passed += 1
 
-for level, tiers in leveltiers.items():
-    levelrank = list(filter(lambda x: x.level == level, alllevelranks))[0]
-    total = len(tiers)
-    earned = total
+    def to_string(self):
+        s = ''
+        # print AAA count; only print 0 AAAs if all SDGs are complete
+        if self.aaa != 0 or self.sdg == self.total:
+            s += ' %d/%d [color=#%s]AAAs[/color]' % (self.aaa, self.total, HEX_AAA)
+        # print SDG count if there are SDGs remaining
+        if self.sdg != self.total:
+            s += ' %d/%d [color=#%s]SDGs[/color]' % (self.sdg, self.total, HEX_SDG)
+        # print FC count if there are FCs remaining
+        if self.fc != self.total:
+            s += ' %d/%d [color=#%s]FCs[/color]' % (self.fc, self.total, HEX_FC)
+        # print passed count if there are unpassed levels remaining
+        if SHOW_PASSED and self.passed != self.total:
+            s += ' %d/%d [color=#%s]Passed[/color]' % (self.passed, self.total, HEX_PASS)
+        # print tier points total if there are tier points remaining
+        if self.tpearned != self.tptotal:
+            s += ' %d/%d [color=#%s]TPs[/color]' % (self.tpearned, self.tptotal, HEX_TP)
+        return s + '\n'
 
-    for tier in tiers:
-        if tier != 'Passed' and levelrank.score >= int(tier):
-            break
-        elif tier == 'Passed' and levelrank.passed():
-            break
-        earned -= 1
+def extract_levelranks(raw_data):
+    # get table columns
+    cols = {}
+    for i, th in enumerate(raw_data('tr')[0]('th')):
+        if th.span:
+            # remove arrow from table headers
+            th.span.extract()
+        cols[th.string.lower()] = i
 
-    # if total == 7:
-    #     print('%d/%d %d %s' % (earned, total, levelrank.d, levelrank.level))
+    return [Levelrank(tr('td'), cols) for tr in raw_data('tr')[1:]]
 
-    leveltierpoints.append(Leveltierpoints(earned, total, levelrank.d))
-    tiertotals.add(total)
+def format_levelranks(levelranks, output_filename, title, write_level_totals):
+    # per-difficulty totals
+    difficulty_totals = [Totals() for _ in range(len(DIFFICULTIES))]
+    # per-level totals
+    level_totals = {}
+    # grand totals
+    totals = Totals()
 
-with open(output_filename, 'a') as f:
-    f.write('[b][u]Tier Point Stats[/u][/b]\n')
+    # accumulate totals
+    for levelrank in levelranks:
+        difficulty_totals[get_difficulty_index(levelrank.d)].add_levelrank(levelrank)
+        if levelrank.d not in level_totals:
+            level_totals[levelrank.d] = Totals()
+        level_totals[levelrank.d].add_levelrank(levelrank)
+        totals.add_levelrank(levelrank)
 
-    for tiertotal in sorted(tiertotals):
-        lts = list(filter(lambda x: x.total == tiertotal, leveltierpoints))
-        earned = sum(lt.earned for lt in lts)
-        total = sum(lt.total for lt in lts)
-        if earned != total:
-            f.write('\n[color=#%s]/%d[/color]: %d/%d [color=#%s]TPs[/color]' % (HEX_D, tiertotal, earned, total, HEX_TP))
+    with open(output_filename, 'a') as f:
+        f.write('[b][u]' + title + '[/u][/b]\n\n')
 
-    totalaaas = len(list(filter(lambda x: x.isAAA(), alllevelranks)))
-    extratierpoints = max(int(100 * totalaaas / len(alllevelranks)) - 49, 0)
-    maxextratierpoints = 50
+        # write per-difficulty totals
+        for i in range(len(DIFFICULTIES)-1, -1, -1):
+            if HIDE_ZERO_DIFFICULTY and i == len(DIFFICULTIES) - 1:
+                continue
+            if difficulty_totals[i].aaa == difficulty_totals[i].total:
+                continue
+            f.write('[color=#%s]%s[/color]:%s' % (HEX_D, DIFFICULTIES[i][0], difficulty_totals[i].to_string()))
+        f.write('\n')
 
-    f.write('\n[color=#%s]+[/color]: %d/%d [color=#%s]TPs[/color]' % (HEX_D, extratierpoints, maxextratierpoints, HEX_TP))
+        # write per-level totals
+        if (write_level_totals):
+            for d, t in sorted(level_totals.items(), key=lambda x:x[0]):
+                if HIDE_ZERO_DIFFICULTY and d == 0:
+                    continue
+                if d > MAX_DIFFICULTY_LEVEL_TOTAL:
+                    break
+                if t.aaa == t.total:
+                    continue
+                f.write('[color=#%s]%d[/color]:%s' % (HEX_D, d, t.to_string()))
+            f.write('\n')
 
-    earnedtierpoints = sum(l.earned for l in leveltierpoints) + extratierpoints
-    totaltierpoints = sum(l.total for l in leveltierpoints) + maxextratierpoints
-    
-    f.write('\n\n[color=#%s]TPs[/color]: %d/%d %.1f%%' % (HEX_TP, earnedtierpoints, totaltierpoints, 100 * earnedtierpoints / totaltierpoints))
+        # write grand totals
+        f.write('[color=#%s]AAAs[/color]: %d/%d %.1f%%\n' % (HEX_AAA, totals.aaa, totals.total, 100 * totals.aaa / totals.total))
+        f.write('[color=#%s]SDGs[/color]: %d/%d %.1f%%\n' % (HEX_SDG, totals.sdg, totals.total, 100 * totals.sdg / totals.total))
+        f.write('[color=#%s]FCs[/color]: %d/%d %.1f%%\n' % (HEX_FC, totals.fc, totals.total, 100 * totals.fc / totals.total))
+        if SHOW_PASSED:
+            f.write('[color=#%s]Passed[/color]: %d/%d %.1f%%\n' % (HEX_PASS, totals.passed, totals.total, 100 * totals.passed / totals.total))
+        f.write('[color=#%s]TPs[/color]: %d/%d %.1f%%\n' % (HEX_TP, totals.tpearned, totals.tptotal, 100 * totals.tpearned / totals.tptotal))
+        f.write('\n')
 
-br.post_stats(open(output_filename, 'r').read())
+def format_tierpoints(all_levelranks, output_filename):
+    tiertotals = set()
+
+    for levelrank in all_levelranks:
+        if levelrank.tpmax == 0:
+            continue
+        tiertotals.add(levelrank.tpmax)
+
+    with open(output_filename, 'a') as f:
+        f.write('[b][u]Tier Point Stats[/u][/b]\n')
+
+        for tiertotal in sorted(tiertotals):
+            lts = list(filter(lambda x: x.tpmax == tiertotal, all_levelranks))
+            earned = sum(lt.tp for lt in lts)
+            total = sum(lt.tpmax for lt in lts)
+            if earned != total:
+                f.write('\n[color=#%s]/%d[/color]: %d/%d [color=#%s]TPs[/color]' % (HEX_D, tiertotal, earned, total, HEX_TP))
+
+        total_aaas = len(list(filter(lambda x: x.isAAA(), all_levelranks)))
+        extra_tierpoints = max(int(100 * total_aaas / len(all_levelranks)) - 49, 0)
+        max_extra_tierpoints = 50
+
+        f.write('\n[color=#%s]+[/color]: %d/%d [color=#%s]TPs[/color]' % (HEX_D, extra_tierpoints, max_extra_tierpoints, HEX_TP))
+
+        earned_tierpoints = sum(l.tp for l in all_levelranks) + extra_tierpoints
+        total_tierpoints = sum(l.tpmax for l in all_levelranks) + max_extra_tierpoints
+        
+        f.write('\n\n[color=#%s]TPs[/color]: %d/%d %.1f%%' % (HEX_TP, earned_tierpoints, total_tierpoints, 100 * earned_tierpoints / total_tierpoints))
+
+
+def get_difficulty_index(d):
+    for i in range(len(DIFFICULTIES)):
+        if d >= DIFFICULTIES[i][1]:
+            return i
+
+def main():
+    credentials = json.loads(open('credentials.json', 'r').read())
+
+    # get the username that the stats will be retrieved for
+    stats_username = credentials['username']
+    if len(sys.argv) == 2:
+        stats_username = sys.argv[1]
+    elif len(sys.argv) != 1:
+        print('Invalid argument format. Please call this script with the following format:')
+        print('\tpython3 stats.py <OPTIONAL:stats_username>')
+        sys.exit()
+
+    br = Browser()
+    br.login(credentials)
+
+    output_filename = time.strftime('stats-%Y-%m-%d-%H-%M-%S.txt')
+    print('[+] Writing stats to ' + output_filename)
+
+    url_levelrank = URL_BASE + '/levelrank.php?sub=' + stats_username
+    levelranks = extract_levelranks(br.get(url_levelrank))
+    format_levelranks(levelranks, output_filename, 'Public Level Stats', True)
+
+    url_tokenlevelrank = URL_BASE + '/levelrank_special.php?sub=' + stats_username
+    token_levelranks = extract_levelranks(br.get(url_tokenlevelrank))
+    format_levelranks(token_levelranks, output_filename, 'Token Level Stats', False)
+
+    all_levelranks = levelranks + token_levelranks
+    format_tierpoints(all_levelranks, output_filename)
+
+    br.post_stats(open(output_filename, 'r').read())
+
+if __name__ == "__main__":
+    main()
